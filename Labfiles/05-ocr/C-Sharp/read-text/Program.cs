@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Azure;
+using Azure.AI.Vision.ImageAnalysis;
 
 // Import namespaces
 
@@ -27,7 +28,10 @@ namespace read_text
                 string aiSvcKey = configuration["AIServicesKey"];
 
                 // Authenticate Azure AI Vision client
-
+                ImageAnalysisClient client = new ImageAnalysisClient(
+                    new Uri(aiSvcEndpoint),
+                    new AzureKeyCredential(aiSvcKey)
+                );
 
                 // Menu for text reading functions
                 Console.WriteLine("\n1: Use Read API for image (Lincoln.jpg)\n2: Read handwriting (Note.jpg)\nAny other key to quit\n");
@@ -66,6 +70,58 @@ namespace read_text
 
             // Use Analyze image function to read text in image
             
+            ImageAnalysisResult result = client.Analyze(
+                BinaryData.FromStream(stream),
+                VisualFeatures.Read
+            );
+            stream.Close();
+
+            if(result.Read != null){
+                System.Drawing.Image image = System.Drawing.Image.FromFile(imageFile);
+                Graphics graphics = Graphics.FromImage(image);
+                Pen pen = new Pen(Color.Cyan, 3);
+                foreach(var line in result.Read.Blocks.SelectMany(block => block.Lines)){
+                    Console.WriteLine($"   '{line.Text}'");
+                    var drawLinePolygon = true;
+                    Console.WriteLine($"   Bounding Polygon: [{string.Join(" ", line.BoundingPolygon)}]"); 
+
+                   foreach (DetectedTextWord word in line.Words)
+                    {
+                        Console.WriteLine($"     Word: '{word.Text}', Confidence {word.Confidence:F4}, Bounding Polygon: [{string.Join(" ", word.BoundingPolygon)}]");
+                    // Draw word bounding polygon
+                    drawLinePolygon = false;
+                    var r = word.BoundingPolygon;
+
+                    Point[] polygonPoints = {
+                        new Point(r[0].X, r[0].Y),
+                        new Point(r[1].X, r[1].Y),
+                        new Point(r[2].X, r[2].Y),
+                        new Point(r[3].X, r[3].Y)
+                    };
+
+                    graphics.DrawPolygon(pen, polygonPoints);
+                    }
+
+                    if(drawLinePolygon){
+                        var r= line.BoundingPolygon;
+
+                        Point[] polygonPoints = {
+                            new Point(r[0].X,r[0].Y),
+                            new Point(r[1].X,r[1].Y),
+                            new Point(r[2].X,r[2].Y),
+                            new Point(r[3].X,r[3].Y)
+                        };
+
+                        graphics.DrawPolygon(pen,polygonPoints);
+                    }
+                }
+
+                // Save image
+                String output_file = "text.jpg";
+                image.Save(output_file);
+                Console.WriteLine("\nResults saved in " + output_file + "\n");  
+
+            }
     
         }
     }
